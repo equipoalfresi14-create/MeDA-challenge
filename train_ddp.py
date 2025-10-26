@@ -478,18 +478,18 @@ def main():
                 return logits
         
         head6 = getattr(model_to_eval, "universal_head_6", None) or getattr(model_to_eval, "universal_head", None)
-                if head6 is None: raise AttributeError("No se encontró la cabeza universal de 6 clases.")
-                e2e = Universal6End2End(model_to_eval.backbone, head6).to(DEVICE).eval()
-                dummy = torch.randn(1, 3, IMG_SIZE, IMG_SIZE, device=DEVICE)
-                onnx_path = os.path.join(CKPT_DIR, "universal6_end2end.onnx")
-                torch.onnx.export(
-                    e2e, dummy, onnx_path,
-                    input_names=["input"], output_names=["logits6"],
-                    opset_version=13,
-                    dynamic_axes={"input": {0: "batch"}, "logits6": {0: "batch"}},
-                    do_constant_folding=True
-                )
-                print(f"[ONNX] {onnx_path}")
+        if head6 is None: raise AttributeError("No se encontró la cabeza universal de 6 clases.")
+        e2e = Universal6End2End(model_to_eval.backbone, head6).to(DEVICE).eval()
+        dummy = torch.randn(1, 3, IMG_SIZE, IMG_SIZE, device=DEVICE)
+        onnx_path = os.path.join(CKPT_DIR, "universal6_end2end.onnx")
+        torch.onnx.export(
+            e2e, dummy, onnx_path,
+            input_names=["input"], output_names=["logits6"],
+            opset_version=13,
+            dynamic_axes={"input": {0: "batch"}, "logits6": {0: "batch"}},
+            do_constant_folding=True
+        )
+        print(f"[ONNX] {onnx_path}")
 
     if is_distributed:
         dist.barrier()
