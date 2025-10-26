@@ -464,32 +464,32 @@ def main():
             raise AttributeError("No se encontró la cabeza universal de 6 clases (universal_head_6 o universal_head).")
 
         # Wrapper que expone SOLO la cabeza (entrada: features del backbone)
-        class Universal6HeadOnly(torch.nn.Module):
-            def __init__(self, head):
-                super().__init__()
-                self.head = head
-            def forward(self, feats):
-                return self.head(feats)
-
-        head_wrapper = Universal6HeadOnly(head6).to(DEVICE).eval()
-
-        # Descubre automáticamente la forma correcta de features pasando un dummy por el backbone
-        with torch.no_grad():
-            dummy_img = torch.randn(1, 3, 224, 224, device=DEVICE)
-            feats = model_to_eval.backbone(dummy_img, domain_idx=None)  # solo para obtener shape
-
-        onnx_head_path = os.path.join(CKPT_DIR, "universal6_head_only.onnx")
-        torch.onnx.export(
-            head_wrapper,
-            feats,  # dummy con la forma exacta de las features
-            onnx_head_path,
-            input_names=["features"],
-            output_names=["logits6"],
-            opset_version=13,
-            dynamic_axes={"features": {0: "batch"}, "logits6": {0: "batch"}},
-            do_constant_folding=True
-        )
-        print(f"[ONNX] exportado SOLO la cabeza universal: {onnx_head_path}")
+        class Universal6End2End(nn.Module):
+            def _init_(self, model_backbone, head6, mean=(0.485,0.456,0.406), std=(0.229,0.224,0.225)):
+                super()._init_()
+                self.backbone = model_backbone
+                self.head6 = head6
+                self.register_buffer("mean", torch.tensor(mean).view(1,3,1,1))
+                self.register_buffer("std",  torch.tensor(std).view(1,3,1,1))
+            def forward(self, x):
+                x = (x - self.mean) / self.std
+                feats = self.backbone(x, domain_idx=None)
+                logits = self.head6(feats)
+                return logits
+        
+        head6 = getattr(model_to_eval, "universal_head_6", None) or getattr(model_to_eval, "universal_head", None)
+                if head6 is None: raise AttributeError("No se encontró la cabeza universal de 6 clases.")
+                e2e = Universal6End2End(model_to_eval.backbone, head6).to(DEVICE).eval()
+                dummy = torch.randn(1, 3, IMG_SIZE, IMG_SIZE, device=DEVICE)
+                onnx_path = os.path.join(CKPT_DIR, "universal6_end2end.onnx")
+                torch.onnx.export(
+                    e2e, dummy, onnx_path,
+                    input_names=["input"], output_names=["logits6"],
+                    opset_version=13,
+                    dynamic_axes={"input": {0: "batch"}, "logits6": {0: "batch"}},
+                    do_constant_folding=True
+                )
+                print(f"[ONNX] {onnx_path}")
 
     if is_distributed:
         dist.barrier()
